@@ -1,0 +1,127 @@
+services:
+
+  # ---------- Infrastruktur ----------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: booking
+      POSTGRES_USER: booking
+      POSTGRES_PASSWORD: booking
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U booking"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports:
+      - "15672:15672"   # UI manajemen RabbitMQ (guest/guest)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ---------- Scheduler cluster (3 node, Hirschberg-Sinclair) ----------
+  scheduler-1:
+    build: ./scheduler-service
+    environment:
+      NODE_ID: "1"
+      NODE_NAME: "scheduler-1"
+      PORT: "50051"
+      ALL_NODES: "scheduler-1:1:50051,scheduler-2:2:50051,scheduler-3:3:50051"
+      DB_DSN: "host=postgres dbname=booking user=booking password=booking port=5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  scheduler-2:
+    build: ./scheduler-service
+    environment:
+      NODE_ID: "2"
+      NODE_NAME: "scheduler-2"
+      PORT: "50051"
+      ALL_NODES: "scheduler-1:1:50051,scheduler-2:2:50051,scheduler-3:3:50051"
+      DB_DSN: "host=postgres dbname=booking user=booking password=booking port=5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  scheduler-3:
+    build: ./scheduler-service
+    environment:
+      NODE_ID: "3"
+      NODE_NAME: "scheduler-3"
+      PORT: "50051"
+      ALL_NODES: "scheduler-1:1:50051,scheduler-2:2:50051,scheduler-3:3:50051"
+      DB_DSN: "host=postgres dbname=booking user=booking password=booking port=5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------- Booking Service (2 replika untuk load balancing) ----------
+  booking-1:
+    build: ./booking-service
+    environment:
+      INSTANCE_NAME: "booking-1"
+      SCHEDULER_NODES: "scheduler-1:50051,scheduler-2:50051,scheduler-3:50051"
+      RABBIT_HOST: "rabbitmq"
+      DB_DSN: "host=postgres dbname=booking user=booking password=booking port=5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  booking-2:
+    build: ./booking-service
+    environment:
+      INSTANCE_NAME: "booking-2"
+      SCHEDULER_NODES: "scheduler-1:50051,scheduler-2:50051,scheduler-3:50051"
+      RABBIT_HOST: "rabbitmq"
+      DB_DSN: "host=postgres dbname=booking user=booking password=booking port=5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # ---------- Notification Workers (2 worker, async) ----------
+  notif-worker-1:
+    build: ./notification-worker
+    environment:
+      WORKER_NAME: "notif-worker-1"
+      RABBIT_HOST: "rabbitmq"
+      DB_DSN: "host=postgres dbname=booking user=booking password=booking port=5432"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  notif-worker-2:
+    build: ./notification-worker
+    environment:
+      WORKER_NAME: "notif-worker-2"
+      RABBIT_HOST: "rabbitmq"
+      DB_DSN: "host=postgres dbname=booking user=booking password=booking port=5432"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  # ---------- nginx: load balancer + serve dashboard ----------
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./dashboard:/usr/share/nginx/html:ro
+    depends_on:
+      - booking-1
+      - booking-2
+
+volumes:
+  pgdata:

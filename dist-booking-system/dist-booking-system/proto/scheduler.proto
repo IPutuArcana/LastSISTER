@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package scheduler;
+
+// Scheduler service: dijalankan di setiap node cluster.
+// Menangani RPC alokasi slot (dari Booking Service) DAN pesan election
+// antar node (Hirschberg-Sinclair).
+service Scheduler {
+  // RPC bisnis: reservasi slot. Hanya LEADER yang boleh commit.
+  rpc ReserveSlot (ReserveRequest) returns (ReserveResponse);
+
+  // Tanya node siapa leader saat ini.
+  rpc WhoIsLeader (Empty) returns (LeaderInfo);
+
+  // Heartbeat dari leader ke follower (deteksi kegagalan).
+  rpc Heartbeat (HeartbeatMsg) returns (Ack);
+
+  // Pesan election Hirschberg-Sinclair antar node (PROBE/REPLY/LEADER).
+  rpc Election (ElectionMessage) returns (Ack);
+}
+
+message Empty {}
+
+message Ack {
+  bool ok = 1;
+}
+
+message ReserveRequest {
+  string appointment_id = 1;
+  string customer_name  = 2;
+  string service_id     = 3;
+  string slot_time      = 4;   // ISO string, mis. "2026-06-10T09:00"
+}
+
+message ReserveResponse {
+  string status      = 1;      // CONFIRMED | SLOT_TAKEN | NOT_LEADER | NO_LEADER
+  string slot_id     = 2;
+  int32  leader_id   = 3;
+  string leader_addr = 4;      // host:port leader (untuk retry)
+  string message     = 5;
+}
+
+message LeaderInfo {
+  int32  leader_id   = 1;
+  string leader_addr = 2;
+  bool   i_am_leader = 3;
+}
+
+message HeartbeatMsg {
+  int32  leader_id   = 1;
+  string leader_addr = 2;
+}
+
+message ElectionMessage {
+  string type         = 1;     // PROBE | REPLY | LEADER
+  int32  initiator_id = 2;
+  int32  phase        = 3;
+  int32  hops         = 4;
+  string direction    = 5;     // CW | CCW
+  int32  leader_id    = 6;     // dipakai saat type == LEADER
+  int32  origin_id    = 7;     // dipakai saat type == LEADER
+}

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Booking Cluster Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #121822;
+    --panel-2: #0e141d;
+    --line: #1f2a37;
+    --txt: #d7e0ea;
+    --muted: #6b7d92;
+    --green: #36d399;
+    --amber: #fbbd23;
+    --red: #f87272;
+    --blue: #5aa9ff;
+    --crown: #ffd54a;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--txt);
+    font-family: var(--sans);
+    background-image: radial-gradient(circle at 15% -10%, #14202e 0, transparent 45%),
+                      radial-gradient(circle at 110% 0, #161226 0, transparent 40%);
+    min-height: 100vh;
+  }
+  header {
+    padding: 22px 28px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  }
+  header h1 {
+    font-family: var(--mono); font-size: 18px; font-weight: 700;
+    letter-spacing: -.5px; margin: 0;
+  }
+  header h1 .dot { color: var(--green); }
+  header .sub { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .wrap { padding: 24px 28px; max-width: 1180px; margin: 0 auto; }
+  .grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin-bottom: 20px;
+  }
+  .panel h2 {
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted);
+    margin: 0 0 14px; display: flex; justify-content: space-between;
+  }
+
+  /* Cluster nodes */
+  .nodes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .node {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px; position: relative; transition: border-color .3s, box-shadow .3s;
+  }
+  .node.leader { border-color: var(--crown); box-shadow: 0 0 0 1px var(--crown) inset, 0 0 18px -8px var(--crown); }
+  .node.dead { opacity: .45; }
+  .node .nid { font-family: var(--mono); font-size: 13px; font-weight: 700; }
+  .node .role { font-family: var(--mono); font-size: 11px; margin-top: 6px; }
+  .node .crown { position: absolute; top: 10px; right: 12px; font-size: 16px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
+    font-size: 11px; padding: 3px 8px; border-radius: 20px; margin-top: 10px;
+  }
+  .badge .pip { width: 7px; height: 7px; border-radius: 50%; }
+  .badge.alive { background: rgba(54,211,153,.12); color: var(--green); }
+  .badge.alive .pip { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .badge.down { background: rgba(248,114,114,.12); color: var(--red); }
+  .badge.down .pip { background: var(--red); }
+
+  /* Form */
+  label { display:block; font-family: var(--mono); font-size: 11px; color: var(--muted);
+          text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 5px; }
+  input, select {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--txt); padding: 10px 12px; border-radius: 7px; font-family: var(--sans);
+    font-size: 14px;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--blue); }
+  button {
+    margin-top: 16px; width: 100%; background: var(--green); color: #062019;
+    border: none; padding: 12px; border-radius: 7px; font-family: var(--mono);
+    font-weight: 700; font-size: 13px; cursor: pointer; letter-spacing: .5px;
+    transition: filter .2s;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:disabled { opacity: .5; cursor: wait; }
+  .result { margin-top: 14px; font-family: var(--mono); font-size: 12px; padding: 10px 12px;
+            border-radius: 7px; display: none; white-space: pre-wrap; }
+  .result.ok { display:block; background: rgba(54,211,153,.1); color: var(--green); }
+  .result.bad { display:block; background: rgba(251,189,35,.1); color: var(--amber); }
+  .result.err { display:block; background: rgba(248,114,114,.1); color: var(--red); }
+
+  /* Tables / feeds */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+       letter-spacing: 1px; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 9px 8px; border-bottom: 1px solid var(--panel-2); font-family: var(--mono); font-size: 12px; }
+  .st { font-weight: 700; }
+  .st.CONFIRMED, .st.SENT { color: var(--green); }
+  .st.PENDING { color: var(--amber); }
+  .st.REJECTED, .st.FAILED, .st.SLOT_TAKEN { color: var(--red); }
+  .empty { color: var(--muted); font-family: var(--mono); font-size: 12px; padding: 14px 8px; }
+  .feed-item { border-bottom: 1px solid var(--panel-2); padding: 10px 4px; font-size: 13px; }
+  .feed-item .meta { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot">●</span> BOOKING CLUSTER CONSOLE</h1>
+  <span class="sub" id="clock">—</span>
+  <span class="sub">Hirschberg-Sinclair leader election · auto-refresh 2s</span>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <h2>Scheduler Cluster <span id="leaderLabel">—</span></h2>
+    <div class="nodes" id="nodes">
+      <div class="empty">menghubungkan ke cluster...</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <h2>Buat Appointment</h2>
+        <label>Nama Customer</label>
+        <input id="name" placeholder="mis. Budi Santoso" value="Budi Santoso" />
+        <label>Layanan</label>
+        <select id="service">
+          <option value="konsultasi-umum">konsultasi-umum</option>
+          <option value="konsultasi-gigi">konsultasi-gigi</option>
+        </select>
+        <label>Waktu Slot</label>
+        <input id="slot" value="2026-06-10T09:00" />
+        <label>Channel Notifikasi</label>
+        <select id="channel">
+          <option value="WHATSAPP">WHATSAPP</option>
+          <option value="EMAIL">EMAIL</option>
+        </select>
+        <button id="book">RESERVE SLOT</button>
+        <div class="result" id="result"></div>
+      </div>
+    </div>
+    <div>
+      <div class="panel">
+        <h2>Appointments</h2>
+        <table>
+          <thead><tr><th>ID</th><th>Customer</th><th>Slot</th><th>Status</th></tr></thead>
+          <tbody id="appts"><tr><td colspan="4" class="empty">belum ada data</td></tr></tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h2>Notifikasi (async via RabbitMQ)</h2>
+        <div id="notifs"><div class="empty">belum ada notifikasi</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/api';
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+async function refreshCluster(){
+  try {
+    const r = await fetch(`${API}/cluster/leader`);
+    const data = await r.json();
+    const box = document.getElementById('nodes');
+    let leaderId = null;
+    box.innerHTML = data.nodes.map(n => {
+      const alive = n.alive;
+      const isLeader = alive && n.i_am_leader;
+      if (isLeader) leaderId = n.leader_id;
+      const nodeName = n.addr.split(':')[0];
+      return `<div class="node ${isLeader?'leader':''} ${alive?'':'dead'}">
+        ${isLeader?'<span class="crown">♛</span>':''}
+        <div class="nid">${esc(nodeName)}</div>
+        <div class="role" style="color:${isLeader?'var(--crown)':'var(--muted)'}">
+          ${isLeader?'LEADER':(alive?'follower':'offline')}</div>
+        <span class="badge ${alive?'alive':'down'}"><span class="pip"></span>${alive?'ALIVE':'DOWN'}</span>
+      </div>`;
+    }).join('');
+    document.getElementById('leaderLabel').textContent =
+      leaderId ? `leader = node ${leaderId}` : 'no leader';
+  } catch(e){
+    document.getElementById('nodes').innerHTML =
+      '<div class="empty">gateway tidak terjangkau</div>';
+  }
+}
+
+async function refreshAppts(){
+  try {
+    const r = await fetch(`${API}/appointments`);
+    const { appointments } = await r.json();
+    const body = document.getElementById('appts');
+    if (!appointments || !appointments.length){
+      body.innerHTML = '<tr><td colspan="4" class="empty">belum ada data</td></tr>'; return;
+    }
+    body.innerHTML = appointments.map(a => `<tr>
+      <td>${esc(a.id)}</td><td>${esc(a.customer_name)}</td>
+      <td>${esc(a.slot_time)}</td>
+      <td class="st ${esc(a.status)}">${esc(a.status)}</td></tr>`).join('');
+  } catch(e){}
+}
+
+async function refreshNotifs(){
+  try {
+    const r = await fetch(`${API}/notifications`);
+    const { notifications } = await r.json();
+    const box = document.getElementById('notifs');
+    if (!notifications || !notifications.length){
+      box.innerHTML = '<div class="empty">belum ada notifikasi</div>'; return;
+    }
+    box.innerHTML = notifications.map(n => `<div class="feed-item">
+      <div class="meta">[${esc(n.channel)}] <span class="st ${esc(n.status)}">${esc(n.status)}</span> · appt ${esc(n.appointment_id)}</div>
+      <div>${esc(n.detail)}</div></div>`).join('');
+  } catch(e){}
+}
+
+async function book(){
+  const btn = document.getElementById('book');
+  const res = document.getElementById('result');
+  btn.disabled = true; res.className = 'result';
+  try {
+    const r = await fetch(`${API}/appointments`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        customer_name: document.getElementById('name').value,
+        service_id: document.getElementById('service').value,
+        slot_time: document.getElementById('slot').value,
+        channel: document.getElementById('channel').value,
+      })
+    });
+    const data = await r.json();
+    const st = data.reservation?.status;
+    if (st === 'CONFIRMED'){
+      res.className = 'result ok';
+      res.textContent = `CONFIRMED ✓\nslot_id=${data.reservation.slot_id}  leader=node ${data.reservation.leader_id}\nvia ${data.reservation.via}`;
+    } else if (st === 'SLOT_TAKEN'){
+      res.className = 'result bad';
+      res.textContent = 'SLOT_TAKEN — slot ini sudah dipesan (anti double-booking).';
+    } else {
+      res.className = 'result err';
+      res.textContent = `${st || 'ERROR'} — ${data.reservation?.message || ''}`;
+    }
+    refreshAll();
+  } catch(e){
+    res.className = 'result err'; res.textContent = 'Gagal: ' + e;
+  } finally { btn.disabled = false; }
+}
+
+function refreshAll(){ refreshCluster(); refreshAppts(); refreshNotifs(); }
+document.getElementById('book').addEventListener('click', book);
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('id-ID');
+  refreshAll();
+}, 2000);
+document.getElementById('clock').textContent = new Date().toLocaleTimeString('id-ID');
+refreshAll();
+</script>
+</body>
+</html>
