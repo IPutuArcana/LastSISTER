@@ -71,6 +71,11 @@ services:
       SCHEDULER_NODES: "scheduler-1:50051,scheduler-2:50051,scheduler-3:50051"
       RABBIT_HOST: "rabbitmq"
       DB_DSN: "host=postgres dbname=booking user=booking password=booking port=5432"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     depends_on:
       postgres:
         condition: service_healthy
@@ -84,6 +89,11 @@ services:
       SCHEDULER_NODES: "scheduler-1:50051,scheduler-2:50051,scheduler-3:50051"
       RABBIT_HOST: "rabbitmq"
       DB_DSN: "host=postgres dbname=booking user=booking password=booking port=5432"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,8 +130,10 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./dashboard:/usr/share/nginx/html:ro
     depends_on:
-      - booking-1
-      - booking-2
+      booking-1:
+        condition: service_healthy
+      booking-2:
+        condition: service_healthy
 
 volumes:
   pgdata:
